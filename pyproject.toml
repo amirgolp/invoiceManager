@@ -21,5 +21,8 @@ dependencies = [
     "pydantic"
 ]
 
+[tool.setuptools.packages.find]
+include = ["invoicer"]
+
 [project.scripts]
 invoicer = "invoicer.cli:cli"
