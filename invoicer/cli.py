@@ -1,15 +1,10 @@
 import click
 from datetime import datetime
-from invoicer.db_connection import DatabaseConnection, DatabaseConfig
+from invoicer.db_connection import DatabaseConnection
 from invoicer.data_model import insert_data, delete_data, update_data
 
 # Database configuration
-config = DatabaseConfig(
-    db_name='invoiceDB',
-    username='your_username',
-    password='your_password',
-    host='your_cluster_url'
-)
+config = DatabaseConnection.load_config('config.yaml')
 
 # Initialize Database connection
 db = DatabaseConnection(config=config)

@@ -1,5 +1,6 @@
 import mongoengine as me
 from pydantic import BaseModel, SecretStr
+import yaml
 
 
 class DatabaseConfig(BaseModel):
@@ -11,7 +12,7 @@ class DatabaseConfig(BaseModel):
 
 class DatabaseConnection:
 
-    def __init__(self, config: DatabaseConfig):
+    def __init__(self, config: DatabaseConfig = None):
         self.config = config
 
     def connect(self):
@@ -25,3 +26,9 @@ class DatabaseConnection:
             print("Database connection successful.")
         except me.ConnectionError as e:
             print(f"Database connection error: {e}")
+
+    @classmethod
+    def load_config(cls, config_file: str) -> DatabaseConfig:
+        with open(config_file, 'r') as file:
+            config_dict = yaml.safe_load(file)['database']
+            return DatabaseConfig(**config_dict)

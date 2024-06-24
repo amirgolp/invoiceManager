@@ -1,18 +1,12 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from PIL import Image
 import requests
-from invoicer.db_connection import DatabaseConnection, DatabaseConfig
+from invoicer.db_connection import DatabaseConnection
 from invoicer.data_model import get_data, insert_data, delete_data, manually_add_item
 
 # Database configuration
-config = DatabaseConfig(
-    db_name='invoiceDB',
-    username='your_username',
-    password='your_password',
-    host='your_cluster_url'
-)
+config = DatabaseConnection.load_config('config.yaml')
 
 # Initialize Database connection
 db = DatabaseConnection(config=config)

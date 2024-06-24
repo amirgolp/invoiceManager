@@ -21,8 +21,8 @@ Invoicer is a Python package for managing grocery invoices. It provides tools to
 2. Create and activate a virtual environment (optional but recommended):
 
     ```sh
-    python -m venv venv
-    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+    python -m venv .pyenv
+    source .pyenv/bin/activate  # On Windows, use `.pyenv\Scripts\activate`
     ```
 
 3. Install the package in editable mode:
@@ -31,6 +31,17 @@ Invoicer is a Python package for managing grocery invoices. It provides tools to
     pip install -e .
     ```
 
+4. Create a `config.yaml` file in the root of your project directory with your MongoDB configuration:
+
+    ```yaml
+    database:
+      db_name: "invoiceDB"
+      username: "your_username"
+      password: "your_password"
+      host: "your_cluster_url"
+    ```
+
+    Replace the placeholders with your actual MongoDB Atlas credentials.
 ## Configuration
 
 Before using Invoicer, you need to set up the database connection. Update the `DatabaseConfig` parameters in your scripts with your MongoDB Atlas credentials:
