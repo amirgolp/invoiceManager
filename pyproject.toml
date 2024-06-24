@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "invoicer"
+version = "0.1.0"
+description = "A package for managing grocery invoices"
+authors = [
+    {name = "Amir Golparvar", email = "amir.golparvar@physik.hu-berlin.de"}
+]
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "click",
+    "mongoengine",
+    "streamlit",
+    "pandas",
+    "pillow",
+    "requests",
+    "pydantic"
+]
+
+[project.scripts]
+invoicer = "invoicer.cli:cli"
