@@ -3,26 +3,24 @@ import pandas as pd
 from datetime import datetime
 import requests
 from invoicer.db_connection import DatabaseConnection
-from invoicer.data_model import get_data, insert_data, delete_data, manually_add_item
+from data.config import load_config
+from data.model import get_data, insert_data, delete_data, manually_add_item
 
-# Database configuration
-config = DatabaseConnection.load_config('config.yaml')
+# Load application configuration
+config = load_config('config.yaml')
 
-# Initialize Database connection
 db = DatabaseConnection(config=config)
 db.connect()
 
 
-# Gemini Pro API for text extraction
-def extract_text_from_image_with_gemini(image, gemini_pro_access_token):
-    url = "https://api.gemini-pro.com/ocr"
+def extract_text_from_image_with_gemini(image):
+    url = config.gemini.api_url
     headers = {
-        "Authorization": f"Bearer {gemini_pro_access_token}"
+        "Authorization": f"Bearer {config.gemini.access_token.get_secret_value()}"
     }
     files = {'file': image}
     response = requests.post(url, headers=headers, files=files)
-    text = response.json().get('text', '')
-    return text
+    return response.json().get('text', '')
 
 
 def extract_data_from_text(text):
@@ -58,14 +56,12 @@ uploaded_file = st.file_uploader("Choose an invoice image...", type=["jpg", "jpe
 invoice_date = st.date_input("Invoice Date", datetime.now())
 
 if uploaded_file is not None:
-    gemini_pro_access_token = st.text_input("Enter Gemini Pro Access Token", type="password")
-    if gemini_pro_access_token:
-        text = extract_text_from_image_with_gemini(uploaded_file, gemini_pro_access_token)
-        extracted_data = extract_data_from_text(text)
-        st.write("Extracted Data:")
-        for item, quantity, price in extracted_data:
-            st.write(f"Item: {item}, Quantity: {quantity}, Price: {price}")
-            insert_data(item, quantity, price, invoice_date)
+    text = extract_text_from_image_with_gemini(uploaded_file)
+    extracted_data = extract_data_from_text(text)
+    st.write("Extracted Data:")
+    for item, quantity, price in extracted_data:
+        st.write(f"Item: {item}, Quantity: {quantity}, Price: {price}")
+        insert_data(item, quantity, price, invoice_date)
 
 st.write("Stored Data in Database:")
 display_data()

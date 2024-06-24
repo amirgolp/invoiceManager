@@ -1,12 +1,12 @@
 import click
 from datetime import datetime
 from invoicer.db_connection import DatabaseConnection
-from invoicer.data_model import insert_data, delete_data, update_data
+from data.config import load_config
+from data.model import insert_data, delete_data, update_data
 
-# Database configuration
-config = DatabaseConnection.load_config('config.yaml')
+# Load application configuration
+config = load_config('config.yaml')
 
-# Initialize Database connection
 db = DatabaseConnection(config=config)
 db.connect()
 
