@@ -8,6 +8,13 @@ from invoicer.db_connection import connect_to_db
 from invoicer.data.model import Invoice, Item
 from invoicer.data.config import load_config
 from datetime import datetime
+import plotly.express as px
+import pandas as pd
+import logging
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load application configuration
 config = load_config('config.yaml')
@@ -59,24 +66,42 @@ def parse_response(response_text):
 
     for line in lines:
         line = line.strip()
-        if not line or line.startswith("The total price of the items is") or line.startswith("Total"):
+        if not line or line.lower().startswith("total") or line.lower().startswith("the total price of the items is"):
             continue
 
-        # Match the format with 'x quantity' or 'kg' in the quantity field
-        match = re.match(r"^(.*) - (\d+\.?\d* .*) - (\d+\.\d{2}) EUR$", line)
+        # Try to match the format "name - quantity - price"
+        match = re.match(r"^(.*) - ([\d\.]+(?: kg)?) - ([\d\.]+(?: EUR)?)$", line)
         if match:
-            name = match.group(1)
-            quantity = match.group(2)
-            total_item_price = float(match.group(3).replace(',', '.'))
+            name = match.group(1).strip()
+            quantity = match.group(2).strip()
+            price = match.group(3).strip()
+            if ' EUR' in price:
+                price = price.replace(' EUR', '')
+            total_item_price = float(price.replace(',', '.'))
         else:
-            # Match the format without 'x quantity' or 'kg' in the quantity field
-            match = re.match(r"^(.*) - (\d+\.\d{2}) EUR$", line)
+            # Try to match the format "name - price x quantity - total_price"
+            match = re.match(r"^(.*) - ([\d\.]+(?: EUR)?) x ([\d\.]+) - ([\d\.]+(?: EUR)?)$", line)
             if match:
-                name = match.group(1)
-                quantity = "1"  # Default quantity to 1 if not specified
-                total_item_price = float(match.group(2).replace(',', '.'))
+                name = match.group(1).strip()
+                unit_price = match.group(2).strip()
+                quantity = match.group(3).strip()
+                total_item_price = match.group(4).strip()
+                if ' EUR' in total_item_price:
+                    total_item_price = total_item_price.replace(' EUR', '')
+                total_item_price = float(total_item_price.replace(',', '.'))
             else:
-                continue  # Skip lines that don't match any expected format
+                # Handle lines with format "name - quantity - price"
+                parts = line.split(' - ')
+                if len(parts) == 3:
+                    name = parts[0].strip()
+                    quantity = parts[1].strip()
+                    total_item_price = parts[2].strip()
+                    if ' EUR' in total_item_price:
+                        total_item_price = total_item_price.replace(' EUR', '')
+                    total_item_price = float(total_item_price.replace(',', '.'))
+                else:
+                    # Handle unexpected formats by skipping
+                    continue
 
         items.append(Item(name=name, quantity=quantity, price=total_item_price))
         total_price += total_item_price
@@ -84,32 +109,78 @@ def parse_response(response_text):
     return items, total_price
 
 
+def save_to_mongodb():
+    print("Save to MongoDB function called")
+    if st.session_state.processed_items is not None and st.session_state.processed_total_price is not None:
+        print(f"Processed items: {st.session_state.processed_items}")
+        print(f"Total price: {st.session_state.processed_total_price}")
+        try:
+            invoice = Invoice(
+                items=st.session_state.processed_items,
+                total_price=st.session_state.processed_total_price,
+                date=datetime.now()
+            )
+            print(f"Invoice created: {invoice.to_json()}")
+            invoice.save()
+            print("Invoice saved successfully")
+            st.success("Invoice saved to MongoDB Atlas")
+            # Clear the processed data
+            st.session_state.processed_items = None
+            st.session_state.processed_total_price = None
+        except Exception as e:
+            print(f"Error saving to MongoDB: {str(e)}")
+            st.error(f"Failed to save to MongoDB: {str(e)}")
+    else:
+        print("No processed data available")
+        st.warning("No processed data available. Please extract invoice data first.")
+
+
+def query_invoices(start_date, end_date):
+    invoices = Invoice.objects(date__gte=start_date, date__lte=end_date)
+    return [{"date": inv.date.date(), "total_price": inv.total_price} for inv in invoices]
+
+
 # Initialize our streamlit app
 st.set_page_config(page_title="Gemini Image Demo")
 st.header("Gemini Application")
 
+if 'uploaded_file' not in st.session_state:
+    st.session_state.uploaded_file = None
+if 'processed_items' not in st.session_state:
+    st.session_state.processed_items = None
+if 'processed_total_price' not in st.session_state:
+    st.session_state.processed_total_price = None
+
 uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
-image = ""
 if uploaded_file is not None:
-    image = Image.open(uploaded_file)
+    st.session_state.uploaded_file = uploaded_file
+
+if st.session_state.uploaded_file is not None:
+    image = Image.open(st.session_state.uploaded_file)
     st.image(image, caption="Uploaded Image.", use_column_width=True)
-    image_path = save_uploaded_file(uploaded_file)
+    image_path = save_uploaded_file(st.session_state.uploaded_file)
 
 submit = st.button("Extract the invoice data")
 
 input_prompt = """
                You are an expert in understanding invoices.
                You will receive input images as invoices &
-               you will have to find all items in the invoice. List them one per line, each
+               you will have to find all items in the invoice. 
+               If the language is in German, translate the item names to English before putting them in the 
+               following format. If the names are abbreviated, try to get the full English names.
+               for example, "Gurken" should be written as "cucumber". When extracting the quantity,
+               if you find the unit of "kilograms" or "kg", just extract the value, and if you
+               find a "multiplier" sign or "cross" sign, the ignore the individual unit price and
+               extract the total number or total weight as for the quantity. 
+               List them one per line, each
                line in this format: {name of the item} - {quantity} - {total price of the item}
-
-               Make sure the summation of total prices matches the total price on the invoice.
-               If the language is in German, translate the item names to English in response.
+               
+               Do NOT write the total/sum amount.
                """
 
 # If ask button is clicked
-if submit:
-    image_data = input_image_setup(uploaded_file)
+if submit and st.session_state.uploaded_file is not None:
+    image_data = input_image_setup(st.session_state.uploaded_file)
     response = get_gemini_response(input_prompt, image_data)
     st.subheader("The Response is")
     st.write(response)
@@ -120,7 +191,52 @@ if submit:
         st.write(f"{item.name} - {item.quantity} - {item.price}")
     st.write(f"Total Price: {total_price}")
 
-    invoice = Invoice(items=items, total_price=total_price, date=datetime.now())
-    invoice.save()
-    st.success("Invoice saved to MongoDB Atlas")
+    # Store the processed data in session state
+    st.session_state.processed_items = items
+    st.session_state.processed_total_price = total_price
 
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Reprocess Image"):
+            st.experimental_rerun()
+    with col2:
+        st.button("Save to MongoDB", on_click=save_to_mongodb)
+
+
+st.header("Expenditure Analysis")
+start_date = st.date_input("Start Date")
+end_date = st.date_input("End Date")
+
+if st.button("Generate Report"):
+    invoices = query_invoices(start_date, end_date)
+
+    if not invoices:
+        st.warning("No invoices found for the selected date range.")
+    else:
+        df = pd.DataFrame(invoices)
+
+        total_expenditure = df['total_price'].sum()
+
+        st.subheader(f"Total Expenditure from {start_date} to {end_date}")
+        st.write(f"Total Expenditure: {total_expenditure:.2f} EUR")
+
+        # Prepare data for pie chart
+        item_summary = {}
+        for invoice in Invoice.objects(date__gte=start_date, date__lte=end_date):
+            for item in invoice.items:
+                if item.name in item_summary:
+                    item_summary[item.name] += item.price
+                else:
+                    item_summary[item.name] = item.price
+
+        # Pie chart for expenditure distribution
+        item_names = list(item_summary.keys())
+        item_prices = list(item_summary.values())
+
+        fig_pie = px.pie(values=item_prices, names=item_names, title="Expenditure Distribution")
+        st.plotly_chart(fig_pie)
+
+        # Line chart for total expenses over time
+        df = df.sort_values('date')
+        fig_line = px.line(df, x='date', y='total_price', title='Total Expenses Over Time')
+        st.plotly_chart(fig_line)
