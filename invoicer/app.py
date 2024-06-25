@@ -140,6 +140,90 @@ def query_invoices(start_date, end_date):
     return [{"date": inv.date.date(), "total_price": inv.total_price} for inv in invoices]
 
 
+def add_new_invoice():
+    st.subheader("Add New Invoice")
+
+    if 'item_count' not in st.session_state:
+        st.session_state.item_count = 1
+
+    with st.form("new_invoice_form2"):
+        date = st.date_input("Invoice Date", datetime.now())
+        time = st.time_input("Invoice Time", datetime.now().time())
+
+        total_price = st.number_input("Total Price", min_value=0.0, step=0.01)
+
+        # Dynamic form for adding items
+        items = []
+        for i in range(st.session_state.item_count):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                name = st.text_input(f"Item {i + 1} Name", key=f"name_{i}")
+            with col2:
+                quantity = st.number_input(f"Item {i + 1} Quantity", min_value=0, step=1, key=f"quantity_{i}")
+            with col3:
+                price = st.number_input(f"Item {i + 1} Price", min_value=0.0, step=0.01, key=f"price_{i}")
+
+            if name and quantity > 0 and price > 0:
+                items.append(Item(name=name, quantity=quantity, price=price))
+
+        add_item = st.form_submit_button("Add a New Item")
+        if add_item:
+            st.session_state.item_count += 1
+            st.experimental_rerun()
+
+        submitted = st.form_submit_button("Add Invoice")
+        if submitted:
+            new_invoice = Invoice(date=date, items=items, total_price=total_price)
+            new_invoice.save()
+            st.success("New invoice added successfully!")
+            st.session_state.item_count = 1  # Reset item count after successful submission
+
+
+def edit_delete_invoice():
+    st.subheader("Edit/Delete Invoice")
+    invoices = Invoice.objects.order_by('-date')
+    selected_invoice = st.selectbox("Select an invoice", options=invoices,
+                                    format_func=lambda x: f"{x.date} - Total: {x.total_price}")
+
+    if selected_invoice:
+        with st.form("edit_invoice_form"):
+            date = st.date_input("Invoice Date", selected_invoice.date)
+            total_price = st.number_input("Total Price", min_value=0.0, step=0.01, value=selected_invoice.total_price)
+
+            items = []
+            for i, item in enumerate(selected_invoice.items):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    name = st.text_input(f"Item {i + 1} Name", value=item.name, key=f"edit_name_{i}")
+                with col2:
+                    quantity = st.number_input(f"Item {i + 1} Quantity", min_value=0, step=1, value=item.quantity,
+                                               key=f"edit_quantity_{i}")
+                with col3:
+                    price = st.number_input(f"Item {i + 1} Price", min_value=0.0, step=0.01, value=item.price,
+                                            key=f"edit_price_{i}")
+
+                if name and quantity > 0 and price > 0:
+                    items.append(Item(name=name, quantity=quantity, price=price))
+
+            col1, col2 = st.columns(2)
+            with col1:
+                update = st.form_submit_button("Update Invoice")
+            with col2:
+                delete = st.form_submit_button("Delete Invoice")
+
+            if update:
+                selected_invoice.date = date
+                selected_invoice.items = items
+                selected_invoice.total_price = total_price
+                selected_invoice.save()
+                st.success("Invoice updated successfully!")
+
+            if delete:
+                selected_invoice.delete()
+                st.success("Invoice deleted successfully!")
+                st.experimental_rerun()
+
+
 # Initialize our streamlit app
 st.set_page_config(page_title="Gemini Image Demo")
 st.header("Gemini Application")
@@ -150,6 +234,9 @@ if 'processed_items' not in st.session_state:
     st.session_state.processed_items = None
 if 'processed_total_price' not in st.session_state:
     st.session_state.processed_total_price = None
+
+# Call the add_new_invoice function in the Streamlit app
+add_new_invoice()
 
 uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 if uploaded_file is not None:
@@ -240,3 +327,24 @@ if st.button("Generate Report"):
         df = df.sort_values('date')
         fig_line = px.line(df, x='date', y='total_price', title='Total Expenses Over Time')
         st.plotly_chart(fig_line)
+
+# Main app layout
+st.title("Invoice Manager")
+
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("Add New Invoice"):
+        st.session_state.show_add_dialog = True
+
+with col2:
+    if st.button("Edit/Delete Invoice"):
+        st.session_state.show_edit_dialog = True
+
+if 'show_add_dialog' not in st.session_state:
+    st.session_state.show_add_dialog = False
+
+if 'show_edit_dialog' not in st.session_state:
+    st.session_state.show_edit_dialog = False
+
+# if st.session_state.show_edit_dialog:
+#     edit_delete_invoice()
