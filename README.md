@@ -83,9 +83,9 @@ The Streamlit application provides a web interface for interacting with the invo
 
 Make sure you're in the root directory of the project when running this command.
 
-2. Open the provided URL in your web browser.
+1. Open the provided URL in your web browser.
 
-3. Upload invoice images, view extracted data, and manage items directly from the web interface.
+2. Upload invoice images, view extracted data, and manage items directly from the web interface.
 
 ## Dependencies
 
