@@ -1,58 +1,47 @@
 import click
-from datetime import datetime
-from invoicer.db_connection import DatabaseConnection
-from data.config import load_config
-from data.model import insert_data, delete_data, update_data
-
-# Load application configuration
-config = load_config('config.yaml')
-
-db = DatabaseConnection(config=config)
-db.connect()
+from invoicer.db_connection import connect_to_db
+from invoicer.data.model import Invoice
+from invoicer.data.config import load_config
+import requests
 
 
 @click.group()
 def cli():
-    """CLI tool to manage grocery items in the database."""
     pass
 
 
-@cli.group()
-def admin():
-    """Admin commands to manage grocery items."""
-    pass
+@cli.command()
+@click.argument('image_path')
+def process_invoice(image_path):
+    connect_to_db()
+    config = load_config()
+    api_key = config['google']['gemini_api_key']
+
+    # Use Google Gemini API to parse the image
+    parsed_data = parse_invoice(image_path, api_key)
+
+    # Save parsed data to MongoDB
+    invoice = Invoice(**parsed_data)
+    invoice.save()
+    click.echo("Invoice saved to MongoDB Atlas")
 
 
-@admin.command()
-@click.argument('item')
-@click.argument('quantity', type=int)
-@click.argument('price', type=float)
-@click.argument('date', type=click.DateTime(formats=["%Y-%m-%d"]))
-def add(item: str, quantity: int, price: float, date: datetime):
-    """Add an item to the database."""
-    insert_data(item, quantity, price, date.date())
-    click.echo(f"Item '{item}' added successfully.")
+def parse_invoice(image_path, api_key):
+    # Simulating the Google Gemini API call
+    url = f"https://gemini.googleapis.com/v1/invoices:parse?key={api_key}"
+    with open(image_path, 'rb') as image_file:
+        response = requests.post(url, files={"file": image_file})
+
+    # Simulating a response
+    response_data = response.json()
+    parsed_data = {
+        "invoice_number": response_data["invoiceNumber"],
+        "vendor_name": response_data["vendorName"],
+        "total_amount": response_data["totalAmount"],
+        "date": response_data["date"]
+    }
+    return parsed_data
 
 
-@admin.command()
-@click.argument('item')
-@click.argument('quantity', type=int)
-@click.argument('price', type=float)
-@click.argument('date', type=click.DateTime(formats=["%Y-%m-%d"]))
-def update(item: str, quantity: int, price: float, date: datetime):
-    """Update an item in the database."""
-    update_data(item, quantity, price, date.date())
-    click.echo(f"Item '{item}' updated successfully.")
-
-
-@admin.command()
-@click.argument('item')
-@click.argument('date', type=click.DateTime(formats=["%Y-%m-%d"]))
-def delete(item: str, date: datetime):
-    """Delete an item from the database."""
-    delete_data(item, date.date())
-    click.echo(f"Item '{item}' deleted successfully.")
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     cli()
