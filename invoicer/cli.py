@@ -1,4 +1,6 @@
 import base64
+import os
+import subprocess
 
 import click
 from datetime import datetime
@@ -92,6 +94,18 @@ def parse_invoice(image_path, api_key):
     parsed_data = json.loads(generated_text)
 
     return parsed_data
+
+
+@click.command()
+def run_app():
+    """Run the Streamlit application."""
+    streamlit_app_path = os.path.join(os.path.dirname(__file__), 'streamlit_app.py')
+    click.echo("Starting Streamlit app...")
+    subprocess.run(["streamlit", "run", streamlit_app_path])
+
+
+# Add the new command to your cli group
+cli.add_command(run_app)
 
 
 if __name__ == "__main__":
