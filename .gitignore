@@ -1,4 +1,5 @@
 .pyenv
 *.egg-info*
 
+*.env*
 config.yaml

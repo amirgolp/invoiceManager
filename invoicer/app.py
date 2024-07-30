@@ -19,6 +19,7 @@ config = load_config('config.yaml')
 
 # Configure Gemini API
 genai.configure(api_key=config['gemini']['google_api_key'])
+gemini_model = config['gemini']['gemini_model']
 
 # Initialize Database connection (Singleton)
 connect_to_db('config.yaml')
@@ -78,7 +79,7 @@ elif option == "Parse Invoice from Image":
 
     if submit and st.session_state.uploaded_file is not None:
         image_data = input_image_setup(st.session_state.uploaded_file)
-        response = get_gemini_response(input_prompt, image_data)
+        response = get_gemini_response(gemini_model, input_prompt, image_data)
         st.subheader("The Response is")
         st.write(response)
 

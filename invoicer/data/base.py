@@ -10,8 +10,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def get_gemini_response(prompt, image):
-    model = genai.GenerativeModel('gemini-pro-vision')
+def get_gemini_response(gemini_model, prompt, image):
+    model = genai.GenerativeModel(gemini_model)
     response = model.generate_content([prompt, image[0]])
     print(response.text)
     return response.text
