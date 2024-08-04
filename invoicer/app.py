@@ -1,3 +1,6 @@
+import json
+from datetime import datetime
+
 import streamlit as st
 from PIL import Image
 import google.generativeai as genai
@@ -27,10 +30,12 @@ connect_to_db('config.yaml')
 # Initialize session state variables
 if 'uploaded_file' not in st.session_state:
     st.session_state.uploaded_file = None
+if 'response_dict' not in st.session_state:
+    st.session_state.response_dict = None
 if 'processed_items' not in st.session_state:
     st.session_state.processed_items = None
-if 'processed_total_price' not in st.session_state:
-    st.session_state.processed_total_price = None
+if 'invoice_metadata' not in st.session_state:
+    st.session_state.invoice_metadata = None
 
 # Main app layout
 st.title("Invoice Manager")
@@ -38,18 +43,23 @@ st.title("Invoice Manager")
 # Sidebar with options
 st.sidebar.header("Invoice Options")
 option = st.sidebar.radio("Select an option",
-                          ["None", "Add New Invoice", "Edit/Delete Invoice", "Parse Invoice from Image"])
+                          [
+                              "None",
+                              "Automatically Add New Invoice",
+                              "Manually Add New Invoice",
+                              "Edit/Delete Previous Invoice"
+                           ])
 
 st.sidebar.header("Analysis")
 show_graphs = st.sidebar.checkbox("Show Expenditure Analysis", False)
 
-if option == "Add New Invoice":
+if option == "Manually Add New Invoice":
     add_new_invoice()
 
 elif option == "Edit/Delete Invoice":
     edit_delete_invoice()
 
-elif option == "Parse Invoice from Image":
+elif option == "Automatically Add New Invoice":
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
     if uploaded_file is not None:
         st.session_state.uploaded_file = uploaded_file
@@ -62,42 +72,74 @@ elif option == "Parse Invoice from Image":
     submit = st.button("Extract the invoice data")
 
     input_prompt = """
-                   You are an expert in understanding invoices.
-                   You will receive input images as invoices &
-                   you will have to find all items in the invoice. 
-                   If the language is in German, translate the item names to English before putting them in the 
-                   following format. If the names are abbreviated, try to get the full English names.
-                   for example, "Gurken" should be written as "cucumber". When extracting the quantity,
-                   if you find the unit of "kilograms" or "kg", just extract the value, and if you
-                   find a "multiplier" sign or "cross" sign, the ignore the individual unit price and
-                   extract the total number or total weight as for the quantity. 
-                   List them one per line, each
-                   line in this format: {name of the item} - {quantity} - {total price of the item}
+    Extract the following values in JSON format: Items (each item should be a nested dictionary with keys: Name, 
+    Quantity, Unit Price (EUR), Total Price (EUR), Product Name (German), Product Name (English)), Issuer, 
+    Issuer Address, Issuer Phone, Invoice Number, Date Issued, Time Issued.
 
-                   Do NOT write the total/sum amount.
-                   """
+    Ensure the output JSON structure matches this example:
+    {
+        "Items": [
+            {
+                "Name": "Lindt Excell.85%",
+                "Quantity": 1,
+                "Unit Price (EUR)": 2.69,
+                "Total Price (EUR)": 2.69,
+                "Product Name (German)": "Lindt Excell.85%",
+                "Product Name (English)": "Lindt Excellence 85%"
+            }
+        ],
+        "Issuer": "EDEKA Christ",
+        "Issuer Address": "Hildburghauser Str. 52, 12279 Berlin",
+        "Issuer Phone": "030-710 99 49-0",
+        "Invoice Number": "3793",
+        "Date Issued": "05.07.2024",
+        "Time Issued": "20:37:58",
+        "Total Invoice Expense (EUR)": 17.2
+    }
+    """
 
     if submit and st.session_state.uploaded_file is not None:
         image_data = input_image_setup(st.session_state.uploaded_file)
-        response = get_gemini_response(gemini_model, input_prompt, image_data)
-        st.subheader("The Response is")
-        st.write(response)
+        try:
+            response = get_gemini_response(gemini_model, input_prompt, image_data)
+            st.subheader("The Response is")
 
-        items, total_price = parse_response(response)
-        st.write("Parsed Items:")
-        for item in items:
-            st.write(f"{item.name} - {item.quantity} - {item.price}")
-        st.write(f"Total Price: {total_price}")
+            if not response:
+                st.error("Received empty response from the API.")
+            else:
+                response = response.replace('```', '').replace('\n', '').replace('json', '')
 
-        st.session_state.processed_items = items
-        st.session_state.processed_total_price = total_price
+                response_dict = json.loads(response)
+                if response_dict['Date Issued'] is None:
+                    response_dict['Date Issued'] = datetime.now().date()
+                    response_dict['Time Issued'] = datetime.now().time().isoformat()
 
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Reprocess Image"):
-                st.experimental_rerun()
-        with col2:
-            st.button("Save to MongoDB", on_click=save_to_mongodb)
+                st.session_state.response_dict = response_dict.copy()
+
+                items = response_dict.pop("Items", [])
+                items_df = pd.DataFrame(items)
+
+                invoice_metadata = pd.DataFrame([response_dict])
+
+                st.subheader("Extracted Items")
+                st.dataframe(items_df)
+
+                st.subheader("Invoice Metadata")
+                st.dataframe(invoice_metadata)
+
+            st.session_state.processed_items = items
+            st.session_state.invoice_metadata = invoice_metadata
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Reprocess Image"):
+                    st.experimental_rerun()
+            with col2:
+                st.button("Save to MongoDB", on_click=save_to_mongodb)
+        except json.JSONDecodeError as e:
+            st.error(f"JSON decode error: {e}")
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
 
 if show_graphs:
     st.header("Expenditure Analysis")

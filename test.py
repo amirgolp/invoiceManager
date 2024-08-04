@@ -1,3 +1,5 @@
+import datetime
+
 from dotenv import load_dotenv
 import streamlit as st
 import os
@@ -94,6 +96,8 @@ if submit:
             items_df = pd.DataFrame(items)
 
             other_details_df = pd.DataFrame([response_dict])
+            if other_details_df['Date Issued'] is None:
+                other_details_df['Date Issued'] = datetime.date
 
             st.subheader("Extracted Items")
             st.dataframe(items_df)

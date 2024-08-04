@@ -1,6 +1,8 @@
 import re
 import os
 from datetime import datetime
+from typing import Union
+
 import google.generativeai as genai
 from invoicer.data.model import Invoice, Item
 import logging
@@ -87,28 +89,36 @@ def parse_response(response_text):
     return items, total_price
 
 
+def convert_response_object_to_pydantic_model(data: Union[dict, list]):
+    if isinstance(data, list):
+        for item in data:
+            convert_response_object_to_pydantic_model(item)
+    else:
+        for k, v in data.copy().items():
+            if isinstance(v, (dict, list)):
+                convert_response_object_to_pydantic_model(data[k])
+
+            new_k = k.replace(' ', '_').replace('(', '').replace(')', '')
+            del data[k]
+            data[new_k] = v
+    return data
+
+
 def save_to_mongodb():
     print("Save to MongoDB function called")
-    if st.session_state.processed_items is not None and st.session_state.processed_total_price is not None:
-        print(f"Processed items: {st.session_state.processed_items}")
-        print(f"Total price: {st.session_state.processed_total_price}")
+    if st.session_state.processed_items is not None and st.session_state.response_dict is not None:
         try:
-            invoice = Invoice(
-                items=st.session_state.processed_items,
-                total_price=st.session_state.processed_total_price,
-                date=datetime.now()
-            )
-            print(f"Invoice created: {invoice.to_json()}")
+            data = convert_response_object_to_pydantic_model(st.session_state.response_dict)
+            invoice = Invoice(**data)
+            st.info(f"Invoice created!")
             invoice.save()
-            print("Invoice saved successfully")
-            st.success("Invoice saved to MongoDB Atlas")
+            st.info("Invoice saved successfully!")
+            st.success("Invoice saved to MongoDB Atlas!")
             st.session_state.processed_items = None
             st.session_state.processed_total_price = None
         except Exception as e:
-            print(f"Error saving to MongoDB: {str(e)}")
             st.error(f"Failed to save to MongoDB: {str(e)}")
     else:
-        print("No processed data available")
         st.warning("No processed data available. Please extract invoice data first.")
 
 
@@ -117,7 +127,9 @@ def query_invoices(start_date, end_date):
     return [{"date": inv.date.date(), "total_price": inv.total_price} for inv in invoices]
 
 
-def add_new_invoice():
+def add_new_invoice(data=None):
+    if data is None:
+        data = {}
     st.subheader("Add New Invoice")
 
     if 'item_count' not in st.session_state:
@@ -126,30 +138,58 @@ def add_new_invoice():
     with st.form("new_invoice_form2"):
         date = st.date_input("Invoice Date", datetime.now())
         time = st.time_input("Invoice Time", datetime.now().time())
-
         total_price = st.number_input("Total Price", min_value=0.0, step=0.01)
+        issuer = st.text_input("Issuer", '')
+        issuer_address = st.text_input("Issuer Address", '')
+        issuer_phone = st.text_input("Issuer Phone", '')
 
         items = []
         for i in range(st.session_state.item_count):
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4, col5, col6 = st.columns([1, 1, 1, 1, 1.5, 1.5])
             with col1:
-                name = st.text_input(f"Item {i + 1} Name", key=f"name_{i}")
+                name = st.text_input(f"Name {i + 1}", key=f"name_{i}")
             with col2:
-                quantity = st.number_input(f"Item {i + 1} Quantity", min_value=0, step=1, key=f"quantity_{i}")
+                unit_price_eur = st.number_input(f"Unit Price (EUR) {i + 1}", min_value=0, step=1,
+                                                 key=f"unit_price_eur{i}")
             with col3:
-                price = st.number_input(f"Item {i + 1} Price", min_value=0.0, step=0.01, key=f"price_{i}")
+                total_price_eur = st.number_input(
+                    f"Total Price (EUR) {i + 1}", min_value=0.0, step=0.01, key=f"total_price_eur{i}")
+            with col4:
+                quantity = st.number_input(
+                    f"Quantity {i + 1}", min_value=0, step=1, key=f"quantity{i}")
+            with col5:
+                product_name_ger = st.text_input(
+                    f"Product Name (German) {i + 1}", key=f"product_name_ger{i}")
+            with col6:
+                product_name_eng = st.text_input(
+                    f"Product Name (English) {i + 1}", key=f"product_name_eng{i}")
 
-            if name and quantity > 0 and price > 0:
-                items.append(Item(name=name, quantity=quantity, price=price))
+            if name is not None and quantity > 0 and total_price_eur > 0:
+                items.append(Item(
+                    Name=name,
+                    Unit_Price_EUR=unit_price_eur,
+                    Total_Price_EUR=total_price_eur,
+                    Quantity=quantity,
+                    Product_Name_German=product_name_ger,
+                    Product_Name_English=product_name_eng,
+                ))
 
         add_item = st.form_submit_button("Add a New Item")
         if add_item:
             st.session_state.item_count += 1
             st.experimental_rerun()
 
-        submitted = st.form_submit_button("Add Invoice")
+        submitted = st.form_submit_button("Upload Invoice")
         if submitted:
-            new_invoice = Invoice(date=datetime.combine(date, time), items=items, total_price=total_price)
+            new_invoice = Invoice(
+                Date_Issued=datetime.combine(date, time),
+                Time_Issued=time.isoformat(),
+                Items=items,
+                Total_Invoice_Expense_EUR=total_price,
+                Issuer=issuer,
+                Issuer_Address=issuer_address,
+                Issuer_Phone=issuer_phone
+            )
             new_invoice.save()
             st.success("New invoice added successfully!")
             st.session_state.item_count = 1
