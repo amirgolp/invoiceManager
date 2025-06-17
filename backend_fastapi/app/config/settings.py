@@ -17,6 +17,16 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: Optional[str] = None
     GOOGLE_REDIRECT_URI: Optional[str] = None
 
+    # MongoDB settings
+    MONGODB_URI: str = "mongodb://localhost:27017/default_db"
+    MONGODB_DB_NAME: str = "default_db"
+
+    # Redis settings
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    REDIS_PASSWORD: Optional[str] = None
+
 
     class Config:
         case_sensitive = True
