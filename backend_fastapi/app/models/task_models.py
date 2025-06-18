@@ -23,35 +23,29 @@ class TaskBase(BaseModel):
     priority: TaskPriorityEnum = TaskPriorityEnum.MEDIUM
     due_date: Optional[datetime] = None
 
-class TaskCreate(TaskBase):
-    # project_id and workspace_id will be validated from path or request body
-    # created_by_id will be set from the authenticated user
-    # assigned_to_id is optional
-    project_id: uuid.UUID
-    workspace_id: uuid.UUID # Denormalized for easier queries, or could be derived from project
+class TaskCreate(TaskBase): # project_id and workspace_id removed
     assigned_to_id: Optional[uuid.UUID] = None
 
-class TaskUpdate(BaseModel):
+class TaskUpdate(BaseModel): # Will be used for PUT requests later
     title: Optional[str] = None
     description: Optional[str] = None
     status: Optional[TaskStatusEnum] = None
     priority: Optional[TaskPriorityEnum] = None
     due_date: Optional[datetime] = None
-    assigned_to_id: Optional[uuid.UUID] = None
+    assigned_to_id: Optional[uuid.UUID] = None # Allow re-assigning or un-assigning
 
 class TaskInDBBase(TaskBase):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
-    task_code: str = Field(default_factory=lambda: f"TASK-{str(uuid.uuid4())[:6].upper()}") # Example task code
+    task_code: str # Default factory handled by DB model
     project_id: uuid.UUID
     workspace_id: uuid.UUID
     created_by_id: uuid.UUID
     assigned_to_id: Optional[uuid.UUID] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
-        orm_mode = True # For Pydantic v1
-        # from_attributes = True # For Pydantic v2
+        from_attributes = True
 
 class TaskPublic(TaskInDBBase):
     pass
