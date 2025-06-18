@@ -1,10 +1,10 @@
-mongoengine~=0.28.2
-PyYAML~=6.0.1
-streamlit~=1.35.0
-pillow~=10.3.0
-invoicer~=0.1.0
-click~=8.1.7
-requests~=2.32.3
+mongoengine
+PyYAML
+streamlit
+pillow
+invoicer
+click
+requests
 plotly~=5.22.0
 pandas~=2.2.2
 google-generativeai
