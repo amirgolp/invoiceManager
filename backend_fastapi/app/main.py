@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from app.config.settings import settings
-from app.routers import auth_router, workspace_router, project_router, task_router # ADDED task_router here
+from app.routers import auth_router, workspace_router, project_router, task_router, member_router # ADDED member_router here
 from app.db.database import connect_to_mongo, close_mongo_connection
 from app.db.redis_db import get_redis_client, close_redis_connection
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,7 +38,8 @@ if settings.BACKEND_CORS_ORIGINS:
 app.include_router(auth_router.router)
 app.include_router(workspace_router.router)
 app.include_router(project_router.router)
-app.include_router(task_router.router) # ADDED task_router include here
+app.include_router(task_router.router)
+app.include_router(member_router.router) # ADDED member_router include here
 
 @app.get("/")
 async def read_root():
